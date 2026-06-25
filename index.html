@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>計時人員排班系統</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 /* ══ BASE ══ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -460,6 +462,7 @@ body {
         <h1>📅 計時人員排班系統</h1>
         <div class="sub">早班 08:00–12:00 ｜ 中班 13:30–17:30</div>
       </div>
+      <div id="syncDot" title="未設定同步" style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.35);flex-shrink:0"></div>
     </header>
 
     <div class="cal-nav">
@@ -607,6 +610,47 @@ body {
 
 <script>
 /* ══════════════════════════════════════════
+   FIREBASE 設定
+   請到 Firebase Console → 專案設定 → 複製設定貼入下方
+   https://console.firebase.google.com/
+══════════════════════════════════════════ */
+const FIREBASE_CONFIG = {
+  apiKey:            'AIzaSyB2f11FejyonL0dKcsiFMXXbrMOUtlCKLM',
+  authDomain:        'paiban-b87ef.firebaseapp.com',
+  databaseURL:       'https://paiban-b87ef-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:         'paiban-b87ef',
+  storageBucket:     'paiban-b87ef.firebasestorage.app',
+  messagingSenderId: '610161036913',
+  appId:             '1:610161036913:web:2513957cbe530f21d415d0',
+};
+
+let fbReady = false;
+let dataRef  = null;
+
+function initFirebase() {
+  if (FIREBASE_CONFIG.apiKey === '請填入') return;
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    dataRef = firebase.database().ref('shift_v3');
+    fbReady = true;
+    setSyncDot('connecting');
+  } catch(e) { console.warn('Firebase init error:', e); }
+}
+
+function setSyncDot(status) {
+  const el = document.getElementById('syncDot');
+  if (!el) return;
+  const map = {
+    connecting: { bg:'rgba(255,255,255,.6)', title:'連線中…' },
+    synced:     { bg:'#68d391',              title:'已同步 ✔' },
+    error:      { bg:'#fc8181',              title:'同步失敗' },
+  };
+  const s = map[status] || map.error;
+  el.style.background = s.bg;
+  el.title = s.title;
+}
+
+/* ══════════════════════════════════════════
    CONSTANTS
 ══════════════════════════════════════════ */
 const PALETTE=[
@@ -654,14 +698,36 @@ let attMonth=S.month;
 /* ══════════════════════════════════════════
    PERSIST
 ══════════════════════════════════════════ */
-function save(){localStorage.setItem('shift_v3',JSON.stringify(S));}
+function save(){
+  localStorage.setItem('shift_v3',JSON.stringify(S));
+  if(!fbReady)return;
+  dataRef.set({persons:S.persons,schedule:S.schedule})
+    .then(()=>setSyncDot('synced'))
+    .catch(()=>setSyncDot('error'));
+}
+
 function load(){
+  // 先從 localStorage 即時載入（離線也能用）
   const raw=localStorage.getItem('shift_v3')||localStorage.getItem('shift_v2');
   if(raw){
-    const d=JSON.parse(raw);
-    S.schedule=d.schedule||{};
-    S.persons=(d.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||''}));
+    try{
+      const d=JSON.parse(raw);
+      S.schedule=d.schedule||{};
+      S.persons=(d.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||''}));
+    }catch(e){}
   }
+  // Firebase 即時監聽（任何裝置改動都會自動更新）
+  if(!fbReady)return;
+  dataRef.on('value',(snap)=>{
+    const data=snap.val();
+    if(data){
+      S.schedule=data.schedule||{};
+      S.persons=(data.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||''}));
+      localStorage.setItem('shift_v3',JSON.stringify(S));
+      renderAll();
+    }
+    setSyncDot('synced');
+  },()=>setSyncDot('error'));
 }
 
 /* ══════════════════════════════════════════
@@ -1194,7 +1260,7 @@ document.addEventListener('keydown',e=>{
    RENDER ALL / INIT
 ══════════════════════════════════════════ */
 function renderAll(){renderPersonList();renderCalendar();}
-load();renderAll();
+initFirebase();load();renderAll();
 </script>
 </body>
 </html>
