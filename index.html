@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>計時人員排班系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ══ BASE ══ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #2b6cb0;
+  --primary-l: #4299e1;
+  --purple: #553c9a;
+  --purple-l: #805ad5;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Microsoft JhengHei', '微軟正黑體', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  background: #f0f4f8;
+  color: #2d3748;
+  -webkit-tap-highlight-color: transparent;
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 2px; }
+
+/* ══ APP SHELL ══ */
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+/* ══ SCREENS ══ */
+.screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* ══ TOP HEADER ══ */
+.top-hdr {
+  background: linear-gradient(135deg, #2b6cb0, #4299e1);
+  color: #fff;
+  padding: 10px 14px;
+  padding-top: max(10px, var(--safe-t));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  z-index: 10;
+}
+.top-hdr.purple { background: linear-gradient(135deg, #553c9a, #805ad5); }
+.hdr-btn {
+  background: rgba(255,255,255,.22);
+  border: none; color: #fff;
+  border-radius: 8px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; cursor: pointer; flex-shrink: 0;
+}
+.hdr-title { flex: 1; }
+.hdr-title h1 { font-size: .97rem; font-weight: 700; line-height: 1.3; }
+.hdr-title .sub { font-size: .66rem; opacity: .85; margin-top: 1px; }
+
+/* ══ CALENDAR SCREEN ══ */
+.cal-nav {
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 7px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.month-lbl { font-size: .95rem; font-weight: 700; }
+.nav-arrow {
+  background: none;
+  border: 1.5px solid #cbd5e0;
+  border-radius: 8px;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; cursor: pointer; color: #4a5568;
+}
+.nav-arrow:active { background: #f0f4f8; }
+.today-btn {
+  background: #ebf8ff;
+  border: 1px solid #bee3f8;
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: .78rem; font-weight: 600;
+  cursor: pointer; color: #2b6cb0;
+  font-family: inherit;
+}
+
+.cal-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.cal-hdr-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: #2b6cb0;
+  color: #fff;
+  position: sticky; top: 0; z-index: 5;
+}
+.cal-hdr-row div {
+  text-align: center;
+  padding: 6px 2px;
+  font-size: .72rem; font-weight: 700;
+}
+.cal-hdr-row div:first-child { color: #fbd38d; }
+.cal-hdr-row div:last-child  { color: #90cdf4; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); background: #fff; }
+.cc {
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
+  min-height: 68px;
+  padding: 3px 2px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 1px;
+  background: #fff;
+}
+.cc:active { background: #ebf8ff !important; }
+.cc.empty  { cursor: default; background: #fafafa; }
+.cc.today  { background: #ebf8ff; }
+.cc.today .dn { background: #4299e1; color: #fff !important; }
+.cc.sun .dn { color: #dd6b20; }
+.cc.sat .dn { color: #3182ce; }
+.cc.weekend-cell { background: #f9fbff; }
+.cc.holiday-cell { background: #fffef5; }
+
+.dn {
+  font-size: .7rem; font-weight: 700;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #2d3748; margin: 0 auto 1px;
+}
+.hday-badge {
+  font-size: .5rem; font-weight: 700;
+  color: #744210; background: #fef3c7;
+  border-radius: 2px; padding: 1px 2px;
+  text-align: center; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  border: 1px solid #fcd34d;
+}
+.shift-info { display: flex; flex-direction: column; gap: 1px; }
+.shift-lbl  { font-size: .46rem; font-weight: 700; color: #a0aec0; line-height: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 1px; }
+.chip {
+  font-size: .48rem; font-weight: 700;
+  padding: 1px 3px; border-radius: 3px;
+  white-space: nowrap; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.chip-leave { text-decoration: line-through; opacity: .55; }
+
+/* ══ BOTTOM SHEET ══ */
+.sheet-ov {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 200;
+  align-items: flex-end;
+}
+.sheet-ov.show { display: flex; }
+.sheet {
+  background: #fff;
+  border-radius: 18px 18px 0 0;
+  width: 100%; max-height: 88vh;
+  overflow-y: auto;
+  padding: 0 16px;
+  padding-bottom: calc(16px + var(--safe-b));
+  animation: slideUp .2s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-handle { display: flex; justify-content: center; padding: 10px 0 6px; }
+.sheet-handle::after { content:''; display:block; width:36px; height:4px; background:#e2e8f0; border-radius:2px; }
+.sheet-title { font-size: 1rem; font-weight: 700; margin-bottom: 2px; }
+.sheet-date  { font-size: .8rem; color: #718096; margin-bottom: 12px; }
+
+.holiday-box { background:#fffbeb; border:1.5px solid #fcd34d; border-radius:8px; padding:10px; margin-bottom:12px; }
+.holiday-row { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+.holiday-row input[type=checkbox] { width:16px; height:16px; accent-color:#d97706; flex-shrink:0; }
+.holiday-row label { font-size:.85rem; font-weight:700; color:#92400e; cursor:pointer; }
+.holiday-inp {
+  margin-top:8px; width:100%;
+  border:1px solid #fcd34d; border-radius:6px;
+  padding:9px 10px; font-size:.88rem; font-family:inherit;
+  background:#fff; outline:none; min-height:44px;
+}
+.holiday-inp:focus { border-color:#d97706; }
+.holiday-inp.hidden { display:none; }
+
+.shift-sec { margin-bottom:12px; }
+.shift-sec h3 { font-size:.82rem; font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:7px; }
+.badge { display:inline-flex; align-items:center; justify-content:center; border-radius:4px; font-size:.65rem; font-weight:700; padding:2px 7px; }
+.be { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; }
+.bm { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
+.time-tag { font-size:.71rem; color:#718096; font-weight:400; }
+
+.chk-list { display:flex; flex-direction:column; gap:6px; }
+.chk-row {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px;
+  border:1.5px solid #e2e8f0; border-radius:10px;
+  cursor:pointer; user-select:none; min-height:50px;
+}
+.chk-row:active { background:#f7fafc; }
+.chk-row.oe  { background:#fffbeb; border-color:#fbbf24; }
+.chk-row.om  { background:#eff6ff; border-color:#93c5fd; }
+.chk-row.on-leave { border-color:#fc8181 !important; background:#fff5f5 !important; }
+.chk-box {
+  width:20px; height:20px;
+  border:2px solid #cbd5e0; border-radius:5px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.8rem; color:#fff; flex-shrink:0;
+}
+.oe .chk-box { background:#d97706; border-color:#d97706; }
+.om .chk-box { background:#2563eb; border-color:#2563eb; }
+.on-leave .chk-box { background:#fc8181; border-color:#fc8181; }
+.no-elig { font-size:.78rem; color:#a0aec0; font-style:italic; padding:5px 0; }
+
+.leave-btn {
+  border:1.5px solid #fed7d7; border-radius:6px;
+  padding:5px 10px; font-size:.72rem; font-weight:700;
+  cursor:pointer; font-family:inherit;
+  background:#fff5f5; color:#c53030;
+  margin-left:auto; white-space:nowrap; flex-shrink:0;
+  min-height:34px;
+}
+.leave-btn:active { background:#fc8181; color:#fff; }
+.leave-btn.active { background:#fc8181; color:#fff; border-color:#fc8181; }
+.chk-row[data-on="0"] .leave-btn { visibility:hidden; pointer-events:none; }
+
+.sheet-footer { display:flex; gap:8px; margin-top:14px; }
+.btn-cancel {
+  flex:1; background:#fff; color:#718096;
+  border:1.5px solid #cbd5e0;
+  padding:13px; border-radius:10px;
+  font-family:inherit; font-size:.88rem; cursor:pointer; font-weight:600;
+  min-height:50px;
+}
+.btn-save {
+  flex:2; background:#4299e1; color:#fff;
+  border:none; padding:13px; border-radius:10px;
+  font-family:inherit; font-size:.88rem; cursor:pointer; font-weight:700;
+  min-height:50px;
+}
+.btn-save:active { background:#3182ce; }
+.btn-cancel:active { background:#f7fafc; }
+
+/* ══ PERSONNEL SCREEN ══ */
+.screen-body { flex:1; overflow-y:auto; padding:12px; -webkit-overflow-scrolling:touch; }
+
+.card-block {
+  background:#fff; border-radius:12px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:14px; margin-bottom:10px;
+}
+.sec-lbl { font-size:.72rem; font-weight:700; color:#718096; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+
+.inp {
+  width:100%; border:1.5px solid #e2e8f0; border-radius:8px;
+  padding:11px 12px; font-size:.9rem; font-family:inherit;
+  outline:none; margin-bottom:8px; background:#fff;
+  min-height:46px;
+}
+.inp:focus { border-color:#4299e1; box-shadow:0 0 0 3px rgba(66,153,225,.15); }
+
+.pref-row { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
+.pref-btn {
+  border:1.5px solid #cbd5e0; border-radius:8px;
+  padding:9px 4px; font-size:.76rem; font-weight:700;
+  cursor:pointer; background:#fff; color:#4a5568;
+  text-align:center; font-family:inherit; min-height:46px;
+}
+.pref-btn.pe { background:#fffbeb; border-color:#d97706; color:#92400e; }
+.pref-btn.pm { background:#eff6ff; border-color:#3b82f6; color:#1e40af; }
+.pref-btn.pb { background:#f0fdf4; border-color:#16a34a; color:#14532d; }
+
+.btn-add {
+  width:100%; background:#4299e1; color:#fff;
+  border:none; border-radius:10px;
+  padding:13px; font-size:.9rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:50px;
+}
+.btn-add:active { background:#3182ce; }
+
+.person-card {
+  background:#fff; border-radius:12px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:12px 14px; margin-bottom:8px;
+  display:flex; flex-direction:column; gap:10px;
+}
+.pc-top { display:flex; align-items:center; gap:10px; }
+.avatar { border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#fff; flex-shrink:0; }
+.pc-info { flex:1; min-width:0; }
+.pc-empid { font-size:.72rem; color:#718096; font-weight:600; }
+.pc-name  { font-size:.92rem; font-weight:700; }
+.ptag { display:inline-block; font-size:.65rem; font-weight:600; padding:2px 7px; border-radius:8px; margin-top:2px; }
+.te { background:#fef3c7; color:#92400e; }
+.tm { background:#dbeafe; color:#1e40af; }
+.tb { background:#d1fae5; color:#065f46; }
+
+.pc-actions { display:flex; gap:8px; }
+.btn-att-m {
+  flex:1; display:flex; align-items:center; justify-content:center; gap:5px;
+  background:linear-gradient(135deg,#553c9a,#805ad5);
+  color:#fff; border:none; border-radius:8px;
+  padding:10px; font-size:.82rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:46px;
+}
+.btn-att-m:active { opacity:.85; }
+.btn-del-m {
+  background:#fff5f5; color:#c53030;
+  border:1.5px solid #fed7d7; border-radius:8px;
+  padding:10px 14px; font-size:.82rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:46px;
+}
+.btn-del-m:active { background:#fc8181; color:#fff; }
+
+/* ══ STATS SCREEN ══ */
+.stat-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f0f4f8; }
+.stat-row:last-child { border-bottom:none; }
+.bar-wrap { flex:1; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+.bar { height:100%; border-radius:4px; transition:width .4s; }
+.stat-h { font-size:.82rem; font-weight:700; white-space:nowrap; min-width:40px; text-align:right; }
+.leg-row { display:flex; gap:16px; flex-wrap:wrap; }
+.leg-it  { display:flex; align-items:center; gap:6px; font-size:.8rem; }
+
+.btn-excel-m {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; background:#fff; color:#276749;
+  border:1.5px solid #276749; border-radius:10px;
+  padding:13px; font-size:.88rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:50px; margin-bottom:8px;
+}
+.btn-excel-m:active { background:#f0fff4; }
+.btn-print-m {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; background:#fff; color:#553c9a;
+  border:1.5px solid #553c9a; border-radius:10px;
+  padding:13px; font-size:.88rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:50px;
+}
+.btn-print-m:active { background:#faf5ff; }
+
+/* ══ ATTENDANCE SCREEN ══ */
+.att-nav-bar {
+  background:#fff; border-bottom:1px solid #e2e8f0;
+  padding:8px 12px;
+  display:flex; align-items:center; justify-content:space-between;
+  flex-shrink:0;
+}
+.att-month-lbl { font-size:.95rem; font-weight:700; }
+
+.att-scroll { flex:1; overflow-y:auto; padding:10px 12px; -webkit-overflow-scrolling:touch; }
+
+.att-summary {
+  background: linear-gradient(135deg,#553c9a,#805ad5);
+  color:#fff; border-radius:10px;
+  padding:12px 16px; margin-bottom:10px;
+  display:flex; gap:20px; justify-content:center;
+}
+.att-summary-item { text-align:center; }
+.att-summary-item .val { font-size:1.4rem; font-weight:800; }
+.att-summary-item .lbl { font-size:.7rem; opacity:.85; margin-top:2px; }
+
+.att-day-card {
+  background:#fff; border-radius:10px;
+  padding:10px 12px; margin-bottom:6px;
+  display:flex; align-items:center; gap:10px;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+  border-left:4px solid transparent;
+}
+.att-day-card.work-e  { border-left-color:#d97706; }
+.att-day-card.work-m  { border-left-color:#2563eb; }
+.att-day-card.leave   { border-left-color:#fc8181; background:#fff5f5; }
+.att-day-card.holiday { border-left-color:#ed8936; background:#fffbeb; }
+.att-day-card.weekend { border-left-color:#90cdf4; background:#f9fbff; }
+.att-day-card.rest    { border-left-color:#e2e8f0; background:#fafafa; }
+
+.att-date .d1 { font-size:.88rem; font-weight:700; }
+.att-date .d2 { font-size:.7rem; color:#718096; }
+.att-date .dow-sun { color:#dd6b20; font-weight:700; }
+.att-date .dow-sat { color:#3182ce; font-weight:700; }
+.att-shift { flex:1; }
+.att-hours { font-size:.82rem; font-weight:700; color:#553c9a; white-space:nowrap; }
+
+.stag { display:inline-block; border-radius:5px; padding:3px 9px; font-size:.77rem; font-weight:700; }
+.stag-e    { background:#fef3c7; color:#92400e; }
+.stag-m    { background:#dbeafe; color:#1e40af; }
+.stag-leave { background:#fc8181; color:#fff; }
+.stag-hday  { background:#f6ad55; color:#7b341e; }
+.stag-wknd  { background:#bee3f8; color:#2a4365; }
+.stag-rest  { background:#e2e8f0; color:#4a5568; }
+
+.att-export-bar {
+  background:#fff; border-top:1px solid #e2e8f0;
+  padding:10px 12px;
+  display:flex; gap:8px; flex-shrink:0;
+  padding-bottom:max(10px, var(--safe-b));
+}
+.att-export-bar button {
+  flex:1; border-radius:8px;
+  padding:11px; font-size:.85rem; font-weight:700;
+  cursor:pointer; font-family:inherit; min-height:46px; border:none;
+}
+.btn-xe { background:#276749; color:#fff; }
+.btn-xe:active { background:#22543d; }
+.btn-xp { background:#553c9a; color:#fff; }
+.btn-xp:active { background:#44337a; }
+
+/* ══ BOTTOM NAV ══ */
+.bottom-nav {
+  display:flex;
+  background:#fff;
+  border-top:1px solid #e2e8f0;
+  padding-bottom:var(--safe-b);
+  flex-shrink:0;
+  box-shadow:0 -2px 10px rgba(0,0,0,.08);
+}
+.nav-tab {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  padding:8px 4px; cursor:pointer;
+  border:none; background:none; font-family:inherit;
+  color:#a0aec0; gap:3px; min-height:56px;
+}
+.nav-tab.active { color:#2b6cb0; }
+.nav-tab .icon  { font-size:1.3rem; }
+.nav-tab .label { font-size:.64rem; font-weight:700; }
+
+/* ══ TOAST ══ */
+.toast {
+  position:fixed;
+  bottom:calc(68px + var(--safe-b));
+  left:50%; transform:translateX(-50%) translateY(16px);
+  background:#2d3748; color:#fff;
+  padding:10px 18px; border-radius:10px;
+  font-size:.84rem; font-weight:600;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
+  opacity:0; transition:opacity .25s, transform .25s;
+  z-index:9999; white-space:nowrap;
+  pointer-events:none;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ══ EMPTY ══ */
+.empty-msg { text-align:center; color:#a0aec0; font-size:.85rem; font-style:italic; padding:20px 0; }
+
+/* ══ PRINT ══ */
+@media print {
+  .bottom-nav,.top-hdr,.att-export-bar,.att-nav-bar { display:none!important; }
+  .screen { display:block!important; }
+  body { background:#fff; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ████ SCREEN 1: 排班月曆 ████ -->
+  <div id="scr-cal" class="screen active">
+    <header class="top-hdr">
+      <div class="hdr-title">
+        <h1>📅 計時人員排班系統</h1>
+        <div class="sub">早班 08:00–12:00 ｜ 中班 13:30–17:30</div>
+      </div>
+    </header>
+
+    <div class="cal-nav">
+      <button class="nav-arrow" onclick="prevMonth()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="month-lbl" id="monthLbl"></div>
+        <button class="today-btn" onclick="goToday()">今天</button>
+      </div>
+      <button class="nav-arrow" onclick="nextMonth()">›</button>
+    </div>
+
+    <div class="cal-scroll">
+      <div class="cal-hdr-row">
+        <div>日</div><div>一</div><div>二</div>
+        <div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+  </div>
+
+  <!-- ████ SCREEN 2: 人員管理 ████ -->
+  <div id="scr-person" class="screen">
+    <header class="top-hdr">
+      <div class="hdr-title"><h1>👥 人員管理</h1></div>
+    </header>
+    <div class="screen-body">
+      <div class="card-block">
+        <div class="sec-lbl">新增人員</div>
+        <input class="inp" type="text" id="newEmpId" placeholder="員工編號…" maxlength="20">
+        <input class="inp" type="text" id="newName"  placeholder="輸入姓名…" maxlength="10">
+        <div class="sec-lbl" style="margin-top:2px">可排班別</div>
+        <div class="pref-row">
+          <button class="pref-btn pe" data-p="early" onclick="selPref('early')">☀️ 早班</button>
+          <button class="pref-btn"   data-p="mid"   onclick="selPref('mid')">🌤 中班</button>
+          <button class="pref-btn"   data-p="both"  onclick="selPref('both')">🔄 兩班</button>
+        </div>
+        <button class="btn-add" onclick="addPerson()">＋ 新增人員</button>
+      </div>
+
+      <div class="sec-lbl">人員列表</div>
+      <div id="personList"><div class="empty-msg">尚未新增任何人員</div></div>
+    </div>
+  </div>
+
+  <!-- ████ SCREEN 3: 統計 & 匯出 ████ -->
+  <div id="scr-stats" class="screen">
+    <header class="top-hdr">
+      <div class="hdr-title">
+        <h1>📊 統計 &amp; 匯出</h1>
+        <div class="sub" id="statsMonthLbl"></div>
+      </div>
+    </header>
+    <div class="screen-body">
+      <div class="card-block">
+        <div class="sec-lbl">本月時數統計</div>
+        <div id="statsList"><div class="empty-msg">尚無排班資料</div></div>
+      </div>
+      <div class="card-block">
+        <div class="sec-lbl">班別說明</div>
+        <div class="leg-row">
+          <div class="leg-it"><span class="badge be">早班</span>08:00–12:00（4h）</div>
+          <div class="leg-it"><span class="badge bm">中班</span>13:30–17:30（4h）</div>
+        </div>
+      </div>
+      <div class="card-block">
+        <div class="sec-lbl">匯出 / 列印</div>
+        <button class="btn-excel-m" onclick="exportMonthExcel()">📊 匯出月排班 Excel</button>
+        <button class="btn-print-m" onclick="window.print()">🖨️ 列印排班月曆</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ████ SCREEN 4: 出勤紀錄（無底部導覽） ████ -->
+  <div id="scr-att" class="screen">
+    <header class="top-hdr purple">
+      <button class="hdr-btn" onclick="goBack()">←</button>
+      <div class="hdr-title">
+        <h1 id="attMainTitle"></h1>
+        <div class="sub" id="attSubTitle"></div>
+      </div>
+    </header>
+
+    <div class="att-nav-bar">
+      <button class="nav-arrow" onclick="attPrevMonth()">‹</button>
+      <div class="att-month-lbl" id="attMonthLbl"></div>
+      <button class="nav-arrow" onclick="attNextMonth()">›</button>
+    </div>
+
+    <div class="att-scroll">
+      <div id="attCards"></div>
+    </div>
+
+    <div class="att-export-bar">
+      <button class="btn-xe" onclick="exportAttExcel()">📊 匯出 Excel</button>
+      <button class="btn-xp" onclick="printAtt()">🖨️ 列印</button>
+    </div>
+  </div>
+
+  <!-- ████ BOTTOM NAV ████ -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-tab active" data-scr="scr-cal" onclick="switchScreen('scr-cal',this)">
+      <span class="icon">📅</span><span class="label">月曆</span>
+    </button>
+    <button class="nav-tab" data-scr="scr-person" onclick="switchScreen('scr-person',this)">
+      <span class="icon">👥</span><span class="label">人員</span>
+    </button>
+    <button class="nav-tab" data-scr="scr-stats" onclick="switchScreen('scr-stats',this)">
+      <span class="icon">📊</span><span class="label">統計</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ████ 排班 BOTTOM SHEET ████ -->
+<div class="sheet-ov" id="schedOv" onclick="closeSchedOv(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="mTitle"></div>
+    <div class="sheet-date"  id="mDate"></div>
+
+    <div class="holiday-box">
+      <div class="holiday-row" onclick="toggleHolidayInput()">
+        <input type="checkbox" id="hdayCheck">
+        <label for="hdayCheck">🏛️ 標記為國定假日</label>
+      </div>
+      <input type="text" class="holiday-inp hidden" id="hdayName" placeholder="假日名稱（例：端午節）">
+    </div>
+
+    <div class="shift-sec">
+      <h3><span class="badge be">早班</span><span class="time-tag">08:00–12:00　4小時</span></h3>
+      <div class="chk-list" id="earlyList"></div>
+    </div>
+    <div class="shift-sec">
+      <h3><span class="badge bm">中班</span><span class="time-tag">13:30–17:30　4小時</span></h3>
+      <div class="chk-list" id="midList"></div>
+    </div>
+
+    <div class="sheet-footer">
+      <button class="btn-cancel" onclick="closeSched()">取消</button>
+      <button class="btn-save"   onclick="saveSched()">✔ 儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════
+   CONSTANTS
+══════════════════════════════════════════ */
+const PALETTE=[
+  '#2b6cb0','#276749','#805ad5','#c05621','#2c7a7b',
+  '#b7791f','#553c9a','#2f855a','#2a4365','#c05a1e',
+  '#285e61','#702459','#1a365d','#744210','#3c366b',
+];
+const PRESET_HOLIDAYS={
+  '2025-01-01':'元旦','2025-01-27':'農曆春節補假','2025-01-28':'農曆除夕',
+  '2025-01-29':'春節','2025-01-30':'春節','2025-01-31':'春節',
+  '2025-02-28':'和平紀念日','2025-04-03':'兒童節','2025-04-04':'清明節',
+  '2025-04-07':'清明節補假','2025-05-01':'勞動節','2025-05-31':'端午節',
+  '2025-06-02':'端午節補假','2025-10-06':'中秋節','2025-10-10':'國慶日',
+  '2026-01-01':'元旦','2026-02-16':'農曆除夕','2026-02-17':'春節',
+  '2026-02-18':'春節','2026-02-19':'春節','2026-02-28':'和平紀念日',
+  '2026-03-02':'和平紀念日補假','2026-04-04':'兒童節','2026-04-05':'清明節',
+  '2026-04-06':'補假','2026-05-01':'勞動節','2026-06-19':'端午節',
+  '2026-10-10':'國慶日','2026-10-12':'國慶日補假',
+};
+const DOW_ZH    =['日','一','二','三','四','五','六'];
+const MONTHS_ZH =['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const PREF_LBL  ={early:'早班',mid:'中班',both:'兩班'};
+const PREF_CLS  ={early:'te',mid:'tm',both:'tb'};
+const SHIFT_H   =4;
+const SHIFT_INFO={
+  early:{label:'早班',start:'08:00',end:'12:00'},
+  mid:  {label:'中班',start:'13:30',end:'17:30'},
+};
+
+/* ══════════════════════════════════════════
+   STATE
+══════════════════════════════════════════ */
+let S={
+  persons:[],
+  schedule:{},
+  year:new Date().getFullYear(),
+  month:new Date().getMonth(),
+};
+let selPrefVal='early';
+let curSchedKey=null;
+let attPersonId=null;
+let attYear=S.year;
+let attMonth=S.month;
+
+/* ══════════════════════════════════════════
+   PERSIST
+══════════════════════════════════════════ */
+function save(){localStorage.setItem('shift_v3',JSON.stringify(S));}
+function load(){
+  const raw=localStorage.getItem('shift_v3')||localStorage.getItem('shift_v2');
+  if(raw){
+    const d=JSON.parse(raw);
+    S.schedule=d.schedule||{};
+    S.persons=(d.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||''}));
+  }
+}
+
+/* ══════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════ */
+function dKey(y,m,d){return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+function getHolidayName(key){
+  const h=(S.schedule[key]||{}).holiday;
+  if(h==='__cleared__')return '';
+  return h||PRESET_HOLIDAYS[key]||'';
+}
+function hex2bg(hex){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},.13)`;
+}
+
+/* ══════════════════════════════════════════
+   SCREEN NAVIGATION
+══════════════════════════════════════════ */
+function switchScreen(id,tab){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  if(tab)tab.classList.add('active');
+  if(id==='scr-stats')renderStats();
+}
+
+/* ══════════════════════════════════════════
+   PREF SELECTOR
+══════════════════════════════════════════ */
+function selPref(p){
+  selPrefVal=p;
+  document.querySelectorAll('.pref-btn').forEach(b=>{
+    b.classList.remove('pe','pm','pb');
+    if(b.dataset.p===p)b.classList.add(p==='early'?'pe':p==='mid'?'pm':'pb');
+  });
+}
+
+/* ══════════════════════════════════════════
+   PERSONS
+══════════════════════════════════════════ */
+function addPerson(){
+  const empInp=document.getElementById('newEmpId');
+  const inp   =document.getElementById('newName');
+  const empId =empInp.value.trim();
+  const name  =inp.value.trim();
+  if(!empId){toast('請輸入員工編號');return;}
+  if(!name) {toast('請輸入姓名');return;}
+  if(S.persons.find(p=>p.empId===empId)){toast('員工編號已存在');return;}
+  if(S.persons.find(p=>p.name===name))  {toast('姓名已存在');return;}
+  const used =S.persons.map(p=>p.color);
+  const color=PALETTE.find(c=>!used.includes(c))||PALETTE[S.persons.length%PALETTE.length];
+  S.persons.push({id:Date.now().toString(),empId,name,color,pref:selPrefVal});
+  empInp.value='';inp.value='';
+  save();renderAll();
+  toast(`已新增：${empId} ${name}`);
+}
+
+function delPerson(id){
+  const p=S.persons.find(x=>x.id===id);
+  if(!p||!confirm(`確定刪除「${p.name}」？\n相關排班也會移除。`))return;
+  S.persons=S.persons.filter(x=>x.id!==id);
+  for(const k of Object.keys(S.schedule)){
+    S.schedule[k].early =(S.schedule[k].early ||[]).filter(i=>i!==id);
+    S.schedule[k].mid   =(S.schedule[k].mid   ||[]).filter(i=>i!==id);
+    S.schedule[k].leaves=(S.schedule[k].leaves||[]).filter(i=>i!==id);
+  }
+  save();renderAll();
+  toast(`已刪除：${p.name}`);
+}
+
+function renderPersonList(){
+  const el=document.getElementById('personList');
+  if(!S.persons.length){el.innerHTML='<div class="empty-msg">尚未新增任何人員</div>';return;}
+  el.innerHTML=S.persons.map(p=>{
+    const pref=p.pref||'both';
+    return `
+    <div class="person-card">
+      <div class="pc-top">
+        <div class="avatar" style="background:${p.color};width:40px;height:40px;font-size:.92rem">${p.name[0]}</div>
+        <div class="pc-info">
+          <div class="pc-empid">${p.empId||''}</div>
+          <div class="pc-name">${p.name}</div>
+          <span class="ptag ${PREF_CLS[pref]||'tb'}">${PREF_LBL[pref]||'兩班'}</span>
+        </div>
+      </div>
+      <div class="pc-actions">
+        <button class="btn-att-m" onclick="openAtt('${p.id}')">📋 查看出勤紀錄</button>
+        <button class="btn-del-m" onclick="delPerson('${p.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════
+   STATS
+══════════════════════════════════════════ */
+function calcStats(yr,mo){
+  const pfx=`${yr}-${String(mo+1).padStart(2,'0')}-`;
+  const hrs={};S.persons.forEach(p=>{hrs[p.id]=0;});
+  for(const [k,v] of Object.entries(S.schedule)){
+    if(!k.startsWith(pfx))continue;
+    const leaves=v.leaves||[];
+    (v.early||[]).forEach(id=>{if(id in hrs&&!leaves.includes(id))hrs[id]+=SHIFT_H;});
+    (v.mid  ||[]).forEach(id=>{if(id in hrs&&!leaves.includes(id))hrs[id]+=SHIFT_H;});
+  }
+  return hrs;
+}
+
+function renderStats(){
+  document.getElementById('statsMonthLbl').textContent=`${S.year} 年 ${MONTHS_ZH[S.month]}`;
+  const el=document.getElementById('statsList');
+  if(!S.persons.length){el.innerHTML='<div class="empty-msg">尚無排班資料</div>';return;}
+  const hrs=calcStats(S.year,S.month);
+  const max=Math.max(1,...Object.values(hrs));
+  el.innerHTML=S.persons.map(p=>{
+    const h=hrs[p.id]||0;
+    return `
+    <div class="stat-row">
+      <div class="avatar" style="background:${p.color};width:28px;height:28px;font-size:.72rem">${p.name[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.8rem;font-weight:700;margin-bottom:4px">${p.name}</div>
+        <div class="bar-wrap"><div class="bar" style="width:${Math.round(h/max*100)}%;background:${p.color}"></div></div>
+      </div>
+      <div class="stat-h">${h} h</div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════
+   CALENDAR
+══════════════════════════════════════════ */
+function prevMonth(){S.month--;if(S.month<0){S.month=11;S.year--;}renderAll();}
+function nextMonth(){S.month++;if(S.month>11){S.month=0;S.year++;}renderAll();}
+function goToday(){S.year=new Date().getFullYear();S.month=new Date().getMonth();renderAll();}
+
+function renderCalendar(){
+  const{year,month}=S;
+  document.getElementById('monthLbl').textContent=`${year} 年 ${MONTHS_ZH[month]}`;
+  const firstDay =new Date(year,month,1).getDay();
+  const totalDays=new Date(year,month+1,0).getDate();
+  const today    =new Date();
+  let html='';
+
+  for(let i=0;i<firstDay;i++)html+='<div class="cc empty"></div>';
+
+  for(let d=1;d<=totalDays;d++){
+    const key     =dKey(year,month,d);
+    const dow     =new Date(year,month,d).getDay();
+    const isToday =year===today.getFullYear()&&month===today.getMonth()&&d===today.getDate();
+    const isWknd  =dow===0||dow===6;
+    const hdayName=getHolidayName(key);
+    const sc      =S.schedule[key]||{early:[],mid:[],leaves:[]};
+    const leaves  =sc.leaves||[];
+
+    let earlyChips='',midChips='';
+    (sc.early||[]).forEach(id=>{
+      const p=S.persons.find(x=>x.id===id);if(!p)return;
+      const isLeave=leaves.includes(id);
+      earlyChips+=`<span class="chip${isLeave?' chip-leave':''}" style="background:${isLeave?'#fed7d7':hex2bg(p.color)};color:${isLeave?'#c53030':p.color};border:1px solid ${isLeave?'#fc8181':p.color+'44'}">${p.name}</span>`;
+    });
+    (sc.mid||[]).forEach(id=>{
+      const p=S.persons.find(x=>x.id===id);if(!p)return;
+      const isLeave=leaves.includes(id);
+      midChips+=`<span class="chip${isLeave?' chip-leave':''}" style="background:${isLeave?'#fed7d7':hex2bg(p.color)};color:${isLeave?'#c53030':p.color};border:1px solid ${isLeave?'#fc8181':p.color+'44'}">${p.name}</span>`;
+    });
+
+    const cellCls=[
+      'cc',
+      isToday?'today':'',
+      dow===0?'sun':dow===6?'sat':'',
+      hdayName?'holiday-cell':isWknd?'weekend-cell':'',
+    ].filter(Boolean).join(' ');
+
+    html+=`
+      <div class="${cellCls}" onclick="openSched('${key}',${d})">
+        <div class="dn">${d}</div>
+        ${hdayName?`<div class="hday-badge">${hdayName}</div>`:''}
+        ${earlyChips||midChips?`
+          <div class="shift-info">
+            ${earlyChips?`<div class="shift-lbl">早</div><div class="chips">${earlyChips}</div>`:''}
+            ${midChips  ?`<div class="shift-lbl">中</div><div class="chips">${midChips}</div>`:''}
+          </div>`:''}
+      </div>`;
+  }
+  document.getElementById('calGrid').innerHTML=html;
+}
+
+/* ══════════════════════════════════════════
+   SCHEDULING BOTTOM SHEET
+══════════════════════════════════════════ */
+function toggleHolidayInput(){
+  setTimeout(()=>{
+    const on=document.getElementById('hdayCheck').checked;
+    const inp=document.getElementById('hdayName');
+    inp.classList.toggle('hidden',!on);
+    if(on){
+      if(!inp.value&&curSchedKey)inp.value=PRESET_HOLIDAYS[curSchedKey]||'';
+      inp.focus();
+    }
+  },0);
+}
+
+function openSched(key,day){
+  if(!S.persons.length){toast('請先新增人員');return;}
+  curSchedKey=key;
+  const[y,m]=key.split('-');
+  document.getElementById('mTitle').textContent='設定排班';
+  document.getElementById('mDate').textContent=`${y} 年 ${parseInt(m)} 月 ${day} 日`;
+
+  const sc=S.schedule[key]||{early:[],mid:[],leaves:[]};
+  const hdayName=getHolidayName(key);
+  document.getElementById('hdayCheck').checked=!!hdayName;
+  document.getElementById('hdayName').value=hdayName;
+  document.getElementById('hdayName').classList.toggle('hidden',!hdayName);
+
+  const eP=S.persons.filter(p=>p.pref==='early'||p.pref==='both');
+  const mP=S.persons.filter(p=>p.pref==='mid'  ||p.pref==='both');
+  document.getElementById('earlyList').innerHTML=
+    eP.length?eP.map(p=>chkRowHTML(p,'early',(sc.early||[]).includes(p.id),(sc.leaves||[]).includes(p.id))).join(''):
+    '<div class="no-elig">沒有可排早班的人員</div>';
+  document.getElementById('midList').innerHTML=
+    mP.length?mP.map(p=>chkRowHTML(p,'mid',(sc.mid||[]).includes(p.id),(sc.leaves||[]).includes(p.id))).join(''):
+    '<div class="no-elig">沒有可排中班的人員</div>';
+
+  document.getElementById('schedOv').classList.add('show');
+  document.querySelectorAll('.chk-row').forEach(r=>r.addEventListener('click',handleChkRowClick));
+}
+
+function chkRowHTML(p,shift,on,onLeave){
+  const lvActive=on&&onLeave;
+  return `
+    <div class="chk-row${on?` o${shift[0]}`:''}${lvActive?' on-leave':''}"
+         data-id="${p.id}" data-shift="${shift}" data-on="${on?'1':'0'}" data-leave="${lvActive?'1':'0'}">
+      <div class="chk-box">${on?'✓':''}</div>
+      <div class="avatar" style="background:${p.color};width:26px;height:26px;font-size:.7rem">${p.name[0]}</div>
+      <span style="font-size:.87rem;font-weight:600;flex:1">${p.name}</span>
+      <span class="ptag ${PREF_CLS[p.pref||'both']}">${PREF_LBL[p.pref||'both']}</span>
+      <button class="leave-btn${lvActive?' active':''}" onclick="toggleLeave(event,this)">
+        ${lvActive?'🏖️請假':'請假'}
+      </button>
+    </div>`;
+}
+
+function handleChkRowClick(e){
+  if(e.target.classList.contains('leave-btn'))return;
+  const row=e.currentTarget,shift=row.dataset.shift,box=row.querySelector('.chk-box');
+  const on=row.dataset.on==='1';
+  row.dataset.on=on?'0':'1';
+  const cls=`o${shift[0]}`;
+  if(!on){row.classList.add(cls);box.textContent='✓';}
+  else{
+    row.classList.remove(cls);box.textContent='';
+    row.dataset.leave='0';row.classList.remove('on-leave');
+    const lb=row.querySelector('.leave-btn');
+    lb.classList.remove('active');lb.textContent='請假';
+  }
+}
+
+function toggleLeave(e,btn){
+  e.stopPropagation();
+  const row=btn.closest('.chk-row');
+  if(row.dataset.on!=='1')return;
+  const isLeave=row.dataset.leave==='1';
+  row.dataset.leave=isLeave?'0':'1';
+  row.classList.toggle('on-leave',!isLeave);
+  btn.classList.toggle('active',!isLeave);
+  btn.textContent=!isLeave?'🏖️請假':'請假';
+}
+
+function closeSched(){document.getElementById('schedOv').classList.remove('show');curSchedKey=null;}
+function closeSchedOv(e){if(e.target===e.currentTarget)closeSched();}
+
+function saveSched(){
+  if(!curSchedKey)return;
+  const get=sh=>[...document.querySelectorAll(`[data-shift="${sh}"]`)].filter(r=>r.dataset.on==='1').map(r=>r.dataset.id);
+  const leaves=[...document.querySelectorAll('.chk-row[data-leave="1"]')].map(r=>r.dataset.id);
+  const hdayCheck=document.getElementById('hdayCheck').checked;
+  const hdayName =document.getElementById('hdayName').value.trim();
+  const preset   =PRESET_HOLIDAYS[curSchedKey]||'';
+  const customHoliday=hdayCheck?(hdayName||preset||'國定假日'):(preset?'__cleared__':'');
+  S.schedule[curSchedKey]={early:get('early'),mid:get('mid'),leaves,holiday:customHoliday};
+  save();renderAll();closeSched();
+  toast('排班已儲存 ✔');
+}
+
+/* ══════════════════════════════════════════
+   ATTENDANCE
+══════════════════════════════════════════ */
+function openAtt(pid){
+  const p=S.persons.find(x=>x.id===pid);
+  if(!p)return;
+  attPersonId=pid;attYear=S.year;attMonth=S.month;
+  document.getElementById('bottomNav').style.display='none';
+  renderAttPage();
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('scr-att').classList.add('active');
+}
+function attPrevMonth(){attMonth--;if(attMonth<0){attMonth=11;attYear--;}renderAttPage();}
+function attNextMonth(){attMonth++;if(attMonth>11){attMonth=0;attYear++;}renderAttPage();}
+
+function goBack(){
+  document.getElementById('bottomNav').style.display='flex';
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('scr-person').classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('[data-scr="scr-person"]').classList.add('active');
+  renderAll();
+}
+
+function getAttRows(pid,yr,mo){
+  const pfx =`${yr}-${String(mo+1).padStart(2,'0')}-`;
+  const rows=[];
+  const totalDays=new Date(yr,mo+1,0).getDate();
+  for(let d=1;d<=totalDays;d++){
+    const key     =pfx+String(d).padStart(2,'0');
+    const sc      =S.schedule[key]||{};
+    const dow     =new Date(yr,mo,d).getDay();
+    const isWknd  =dow===0||dow===6;
+    const hdayName=getHolidayName(key);
+    const hasEarly=!!(sc.early &&sc.early.includes(pid));
+    const hasMid  =!!(sc.mid   &&sc.mid.includes(pid));
+    const isLeave =!!(sc.leaves&&sc.leaves.includes(pid));
+    if(hasEarly||hasMid){
+      if(isLeave){rows.push({key,d,dow,shift:'leave'});}
+      else{
+        if(hasEarly)rows.push({key,d,dow,shift:'early'});
+        if(hasMid)  rows.push({key,d,dow,shift:'mid'});
+      }
+    }else if(hdayName)rows.push({key,d,dow,shift:'holiday',name:hdayName});
+    else if(isWknd)   rows.push({key,d,dow,shift:'weekend'});
+    else              rows.push({key,d,dow,shift:'rest'});
+  }
+  return rows;
+}
+
+function renderAttPage(){
+  const p=S.persons.find(x=>x.id===attPersonId);
+  if(!p)return;
+  document.getElementById('attMainTitle').textContent=`${attYear} 年 ${attMonth+1} 月出勤紀錄`;
+  document.getElementById('attSubTitle').textContent=`${p.empId?p.empId+' ':''}${p.name}`;
+  document.getElementById('attMonthLbl').textContent=`${attYear} 年 ${MONTHS_ZH[attMonth]}`;
+
+  const rows  =getAttRows(attPersonId,attYear,attMonth);
+  const worked=rows.filter(r=>r.shift==='early'||r.shift==='mid');
+  const totalH=worked.length*SHIFT_H;
+
+  let html=`
+    <div class="att-summary">
+      <div class="att-summary-item"><div class="val">${worked.length}</div><div class="lbl">出勤次數</div></div>
+      <div class="att-summary-item"><div class="val">${totalH}</div><div class="lbl">合計時數</div></div>
+      <div class="att-summary-item"><div class="val">${rows.filter(r=>r.shift==='leave').length}</div><div class="lbl">請假次數</div></div>
+    </div>`;
+
+  rows.forEach(r=>{
+    const dowLbl=DOW_ZH[r.dow];
+    const dowCls=r.dow===0?'dow-sun':r.dow===6?'dow-sat':'';
+    let cardCls='att-day-card',stag='',hours='';
+    switch(r.shift){
+      case 'early':
+        cardCls+=' work-e';
+        stag=`<span class="stag stag-e">${SHIFT_INFO.early.label}</span>`;
+        hours=`${SHIFT_H}h`;break;
+      case 'mid':
+        cardCls+=' work-m';
+        stag=`<span class="stag stag-m">${SHIFT_INFO.mid.label}</span>`;
+        hours=`${SHIFT_H}h`;break;
+      case 'leave':
+        cardCls+=' leave';
+        stag=`<span class="stag stag-leave">請假</span>`;break;
+      case 'holiday':
+        cardCls+=' holiday';
+        stag=`<span class="stag stag-hday">🏛️ ${r.name}</span>`;break;
+      case 'weekend':
+        cardCls+=' weekend';
+        stag=`<span class="stag stag-wknd">假日</span>`;break;
+      case 'rest':
+        cardCls+=' rest';
+        stag=`<span class="stag stag-rest">休假</span>`;break;
+    }
+    html+=`
+      <div class="${cardCls}">
+        <div class="att-date">
+          <div class="d1">${r.key.slice(5).replace('-','/')}</div>
+          <div class="d2 ${dowCls}">${dowLbl}</div>
+        </div>
+        <div class="att-shift">${stag}</div>
+        ${hours?`<div class="att-hours">${hours}</div>`:''}
+      </div>`;
+  });
+
+  document.getElementById('attCards').innerHTML=html;
+}
+
+/* ── Print ── */
+function printAtt(){
+  const p=S.persons.find(x=>x.id===attPersonId);
+  if(!p)return;
+  const rows=getAttRows(attPersonId,attYear,attMonth);
+  let tbody='';
+  rows.forEach(r=>{
+    const dow=DOW_ZH[r.dow];
+    const ds =r.dow===0?'color:#dd6b20;font-weight:700':r.dow===6?'color:#3182ce;font-weight:700':'';
+    const td=(v,s='')=>`<td style="border:1px solid #ddd;padding:2px 3px;text-align:center;${s}">${v}</td>`;
+    let rs='',sc='';
+    switch(r.shift){
+      case 'early':case 'mid':
+        sc=`<span style="background:${r.shift==='early'?'#fef3c7':'#dbeafe'};color:${r.shift==='early'?'#92400e':'#1e40af'};border-radius:3px;padding:1px 5px;font-weight:700">${SHIFT_INFO[r.shift].label}</span>`;break;
+      case 'leave':   rs='background:#fff5f5'; sc=`<span style="background:#fc8181;color:#fff;border-radius:3px;padding:1px 5px;font-weight:700">請假</span>`;break;
+      case 'holiday': rs='background:#fffbeb;color:#744210'; sc=`<span style="background:#f6ad55;color:#7b341e;border-radius:3px;padding:1px 5px;font-weight:700">🏛️ ${r.name}</span>`;break;
+      case 'weekend': rs='background:#f0f4f8;color:#4a5568;font-style:italic'; sc=`<span style="background:#bee3f8;color:#2a4365;border-radius:3px;padding:1px 5px;font-weight:700;font-style:normal">假日</span>`;break;
+      case 'rest':    rs='background:#fafafa;color:#a0aec0;font-style:italic'; sc=`<span style="background:#e2e8f0;color:#4a5568;border-radius:3px;padding:1px 5px;font-weight:700;font-style:normal">休假</span>`;break;
+    }
+    const bd=(r.shift==='early'||r.shift==='mid')?'':'—';
+    tbody+=`<tr style="${rs}">${td(r.key.slice(5).replace('-','/'),'font-size:10px;font-weight:600')}${td(dow,ds)}${td(sc)}${td(bd)}${td(bd)}${td(bd)}${td(bd)}${td(bd)}</tr>`;
+  });
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html lang="zh-TW"><head>
+    <meta charset="UTF-8"><title>出勤紀錄 - ${p.name}</title>
+    <style>
+      @page{size:A4 portrait;margin:7mm}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Microsoft JhengHei',Arial,sans-serif;font-size:9px;color:#2d3748;padding:4px}
+      .card{border:1px solid #bbb;border-radius:4px;overflow:hidden}
+      .hd{text-align:center;padding:6px 10px 5px;border-bottom:1.5px solid #ddd}
+      h2{font-size:18px;font-weight:800;margin-bottom:3px}
+      .nm{font-size:14px;color:#444;margin-bottom:3px;font-weight:600}
+      table{width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed}
+      thead th{background:#553c9a;color:#fff;padding:4px 2px;text-align:center;border:1px solid #44337a;font-size:12px}
+      tbody td{padding:2px;text-align:center;border:1px solid #ddd;white-space:nowrap;overflow:hidden;height:30px;line-height:26px}
+      tr:nth-child(even) td{background:#faf5ff}
+    </style></head><body>
+    <div class="card">
+      <div class="hd">
+        <h2>${attYear} 年 ${attMonth+1} 月　計時人員出勤紀錄表</h2>
+        <div class="nm">${p.empId?`員工編號：<strong>${p.empId}</strong>　`:''}姓名：<strong style="color:${p.color}">${p.name}</strong></div>
+      </div>
+      <table>
+        <thead><tr><th>日期</th><th>星期</th><th>班別</th><th>上班時間</th><th>簽名</th><th>下班時間</th><th>簽名</th><th>工時</th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div></body></html>`);
+  w.document.close();w.focus();
+  setTimeout(()=>{w.print();w.close();},400);
+}
+
+/* ── Export Excel ── */
+function exportAttExcel(){
+  const p=S.persons.find(x=>x.id===attPersonId);
+  if(!p)return;
+  const rows=getAttRows(attPersonId,attYear,attMonth);
+  const worked=rows.filter(r=>r.shift==='early'||r.shift==='mid');
+  const data=[
+    [`${attYear} 年 ${attMonth+1} 月　計時人員出勤紀錄表`],
+    [p.empId?`員工編號：${p.empId}　姓名：${p.name}`:`姓名：${p.name}`],
+    [],
+    ['#','日期','星期','班別','上班時間','簽名','下班時間','簽名','工時（小時）'],
+  ];
+  let seq=0;
+  rows.forEach(r=>{
+    const dow=DOW_ZH[r.dow];
+    switch(r.shift){
+      case 'early':case 'mid': seq++;data.push([seq,r.key,dow,SHIFT_INFO[r.shift].label,'','','','','']);break;
+      case 'leave':   data.push(['—',r.key,dow,'請假','—','—','—','—','—']);break;
+      case 'holiday': data.push(['—',r.key,dow,`🏛️ ${r.name}`,'—','—','—','—','—']);break;
+      case 'weekend': data.push(['—',r.key,dow,'假日','—','—','—','—','—']);break;
+      case 'rest':    data.push(['—',r.key,dow,'休假','—','—','—','—','—']);break;
+    }
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:5},{wch:14},{wch:6},{wch:12},{wch:10},{wch:14},{wch:10},{wch:14},{wch:10}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'出勤紀錄');
+  XLSX.writeFile(wb,`出勤紀錄_${p.name}_${attYear}${String(attMonth+1).padStart(2,'0')}.xlsx`);
+  toast(`${p.name} 出勤紀錄已匯出 📊`);
+}
+
+function exportMonthExcel(){
+  const{year,month}=S;
+  const totalDays=new Date(year,month+1,0).getDate();
+  const sh1=[['日期','星期','早班人員 (08:00-12:00)','中班人員 (13:30-17:30)','國定假日']];
+  for(let d=1;d<=totalDays;d++){
+    const key=dKey(year,month,d);
+    const dow=DOW_ZH[new Date(year,month,d).getDay()];
+    const sc=S.schedule[key]||{early:[],mid:[],leaves:[]};
+    const en=(sc.early||[]).map(id=>S.persons.find(p=>p.id===id)?.name||'').filter(Boolean).join('、')||'—';
+    const mn=(sc.mid  ||[]).map(id=>S.persons.find(p=>p.id===id)?.name||'').filter(Boolean).join('、')||'—';
+    sh1.push([key,dow,en,mn,getHolidayName(key)||'']);
+  }
+  const hrs=calcStats(year,month);
+  const sh2=[['姓名','可排班別','出勤次數','請假次數','合計時數']];
+  S.persons.forEach(p=>{
+    const pfx=`${year}-${String(month+1).padStart(2,'0')}-`;
+    let worked=0,lv=0;
+    for(const[k,v]of Object.entries(S.schedule)){
+      if(!k.startsWith(pfx))continue;
+      const lvs=v.leaves||[];
+      if((v.early||[]).includes(p.id)||(v.mid||[]).includes(p.id)){
+        if(lvs.includes(p.id))lv++;else worked++;
+      }
+    }
+    sh2.push([p.name,PREF_LBL[p.pref||'both'],worked,lv,worked*SHIFT_H]);
+  });
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.aoa_to_sheet(sh1);
+  const ws2=XLSX.utils.aoa_to_sheet(sh2);
+  ws1['!cols']=[{wch:14},{wch:6},{wch:26},{wch:26},{wch:14}];
+  ws2['!cols']=[{wch:10},{wch:10},{wch:10},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws1,'月排班表');
+  XLSX.utils.book_append_sheet(wb,ws2,'時數統計');
+  XLSX.writeFile(wb,`排班表_${year}${String(month+1).padStart(2,'0')}.xlsx`);
+  toast('月排班 Excel 已匯出 📊');
+}
+
+/* ══════════════════════════════════════════
+   TOAST / KEYBOARD
+══════════════════════════════════════════ */
+let _t;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_t);_t=setTimeout(()=>el.classList.remove('show'),2500);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeSched();
+});
+
+/* ══════════════════════════════════════════
+   RENDER ALL / INIT
+══════════════════════════════════════════ */
+function renderAll(){renderPersonList();renderCalendar();}
+load();renderAll();
+</script>
+</body>
+</html>
