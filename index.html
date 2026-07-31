@@ -343,6 +343,13 @@ body {
 }
 .btn-resign-m.reinstate:active { background:#9ae6b4; color:#276749; }
 
+.pref-sel-m {
+  font-size:.75rem; font-weight:700; border-radius:6px;
+  border:1.5px solid #cbd5e0; padding:3px 6px;
+  background:#f7fafc; color:#2d3748;
+  cursor:pointer; font-family:inherit;
+}
+
 /* ══ STATS SCREEN ══ */
 .stat-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #f0f4f8; }
 .stat-row:last-child { border-bottom:none; }
@@ -741,8 +748,9 @@ const PREF_LBL  ={early:'早班',mid:'中班',both:'兩班'};
 const PREF_CLS  ={early:'te',mid:'tm',both:'tb'};
 const SHIFT_H   =4;
 const SHIFT_INFO={
-  early:{label:'早班',start:'08:00',end:'12:00'},
-  mid:  {label:'中班',start:'13:30',end:'17:30'},
+  early:{label:'早班',start:'08:00',end:'12:00',h:4},
+  mid:  {label:'中班',start:'13:30',end:'17:30',h:4},
+  both: {label:'早+中',start:'08:00',end:'17:30',h:8},
 };
 
 /* ══════════════════════════════════════════
@@ -866,6 +874,11 @@ function delPerson(id){
   toast(`已刪除：${p.name}`);
 }
 
+function changePref(id,val){
+  const p=S.persons.find(x=>x.id===id);if(!p)return;
+  p.pref=val;save();renderPersonList();
+}
+
 function resignPerson(id){
   const p=S.persons.find(x=>x.id===id);
   if(!p||!confirm(`確定將「${p.name}」標記為離職？\n離職後將不排入班表，但歷史紀錄保留。`))return;
@@ -891,6 +904,13 @@ function renderPersonList(){
     const pref=p.pref||'both';
     const opacity=isResigned?'opacity:.55;':'';
     const badge=isResigned?`<span style="font-size:.62rem;background:#e2e8f0;color:#718096;border-radius:3px;padding:1px 5px;margin-left:4px">已離職</span>`:'';
+    const prefSel=isResigned
+      ? `<span class="ptag ${PREF_CLS[pref]||'tb'}">${PREF_LBL[pref]||'兩班'}</span>`
+      : `<select class="pref-sel-m" onchange="changePref('${p.id}',this.value)">
+           <option value="early"${pref==='early'?' selected':''}>早班</option>
+           <option value="mid"${pref==='mid'?' selected':''}>中班</option>
+           <option value="both"${pref==='both'?' selected':''}>兩班</option>
+         </select>`;
     const actions=isResigned
       ? `<button class="btn-att-m" onclick="openAtt('${p.id}')">📋 出勤紀錄</button>
          <button class="btn-resign-m reinstate" onclick="reinstatePerson('${p.id}')">復職</button>
@@ -904,7 +924,7 @@ function renderPersonList(){
         <div class="pc-info">
           <div class="pc-empid">${p.empId||''}${badge}</div>
           <div class="pc-name">${p.name}</div>
-          <span class="ptag ${PREF_CLS[pref]||'tb'}">${PREF_LBL[pref]||'兩班'}</span>
+          ${prefSel}
         </div>
       </div>
       <div class="pc-actions">${actions}</div>
@@ -1230,8 +1250,9 @@ function getAttRows(pid,yr,mo){
         rows.push({key,d,dow,shift:'leave',leaveLabel:lt.label,leaveColor:lt.color,leaveBg:lt.bg});
       }
       else{
-        if(hasEarly)rows.push({key,d,dow,shift:'early'});
-        if(hasMid)  rows.push({key,d,dow,shift:'mid'});
+        if(hasEarly&&hasMid) rows.push({key,d,dow,shift:'both'});
+        else if(hasEarly)    rows.push({key,d,dow,shift:'early'});
+        else                 rows.push({key,d,dow,shift:'mid'});
       }
     }else if(hdayName)rows.push({key,d,dow,shift:'holiday',name:hdayName});
     else if(isWknd)   rows.push({key,d,dow,shift:'weekend'});
@@ -1248,8 +1269,8 @@ function renderAttPage(){
   document.getElementById('attMonthLbl').textContent=`${attYear} 年 ${MONTHS_ZH[attMonth]}`;
 
   const rows  =getAttRows(attPersonId,attYear,attMonth);
-  const worked=rows.filter(r=>r.shift==='early'||r.shift==='mid');
-  const totalH=worked.length*SHIFT_H;
+  const worked=rows.filter(r=>r.shift==='early'||r.shift==='mid'||r.shift==='both');
+  const totalH=worked.reduce((s,r)=>s+(SHIFT_INFO[r.shift]?.h||SHIFT_H),0);
 
   let html=`
     <div class="att-summary">
@@ -1266,23 +1287,27 @@ function renderAttPage(){
       case 'early':
         cardCls+=' work-e';
         stag=`<span class="stag stag-e">${SHIFT_INFO.early.label}</span>`;
-        hours=`${SHIFT_H}h`;break;
+        hours=`${SHIFT_INFO.early.h}h`;break;
       case 'mid':
         cardCls+=' work-m';
         stag=`<span class="stag stag-m">${SHIFT_INFO.mid.label}</span>`;
-        hours=`${SHIFT_H}h`;break;
+        hours=`${SHIFT_INFO.mid.h}h`;break;
+      case 'both':
+        cardCls+=' work-e';
+        stag=`<span class="stag stag-e">${SHIFT_INFO.both.label}</span>`;
+        hours=`${SHIFT_INFO.both.h}h`;break;
       case 'leave':
         cardCls+=' leave';
         stag=`<span class="stag stag-leave" style="background:${r.leaveColor||'#c53030'};color:#fff">${r.leaveLabel||'請假'}</span>`;break;
       case 'holiday':
         cardCls+=' holiday';
-        stag=`<span class="stag stag-hday">🏛️ ${r.name}</span>`;break;
+        stag=`<span class="stag stag-hday">—</span>`;break;
       case 'weekend':
         cardCls+=' weekend';
-        stag=`<span class="stag stag-wknd">假日</span>`;break;
+        stag=`<span class="stag stag-wknd">—</span>`;break;
       case 'rest':
         cardCls+=' rest';
-        stag=`<span class="stag stag-rest">休假</span>`;break;
+        stag=`<span class="stag stag-rest">—</span>`;break;
     }
     html+=`
       <div class="${cardCls}">
@@ -1303,23 +1328,47 @@ function printAtt(){
   const p=S.persons.find(x=>x.id===attPersonId);
   if(!p)return;
   const rows=getAttRows(attPersonId,attYear,attMonth);
+  const hasBoth=rows.some(r=>r.shift==='both');
   let tbody='';
   rows.forEach(r=>{
     const dow=DOW_ZH[r.dow];
-    const ds =r.dow===0?'color:#dd6b20;font-weight:700':r.dow===6?'color:#3182ce;font-weight:700':'';
-    const td=(v,s='')=>`<td style="border:1px solid #ddd;padding:2px 3px;text-align:center;${s}">${v}</td>`;
+    const ds=r.dow===0?'color:#dd6b20;font-weight:700':r.dow===6?'color:#3182ce;font-weight:700':'';
+    const td=(v,s='',cs=1)=>`<td colspan="${cs}" style="border:1px solid #ddd;padding:2px 3px;text-align:center;${s}">${v}</td>`;
+    const dateCell=td(r.key.slice(5).replace('-','/'),'font-size:10px;font-weight:600');
+    const dowCell=td(dow,ds);
     let rs='',sc='';
     switch(r.shift){
-      case 'early':case 'mid':
-        sc=`<span style="background:${r.shift==='early'?'#fef3c7':'#dbeafe'};color:${r.shift==='early'?'#92400e':'#1e40af'};border-radius:3px;padding:1px 5px;font-weight:700">${SHIFT_INFO[r.shift].label}</span>`;break;
-      case 'leave':   rs=`background:${r.leaveBg||'#fff5f5'}`; sc=`<span style="background:${r.leaveColor||'#c53030'};color:#fff;border-radius:3px;padding:1px 5px;font-weight:700">${r.leaveLabel||'請假'}</span>`;break;
-      case 'holiday': rs='background:#fffbeb;color:#744210'; sc=`<span style="background:#f6ad55;color:#7b341e;border-radius:3px;padding:1px 5px;font-weight:700">🏛️ ${r.name}</span>`;break;
-      case 'weekend': rs='background:#f0f4f8;color:#4a5568;font-style:italic'; sc=`<span style="background:#bee3f8;color:#2a4365;border-radius:3px;padding:1px 5px;font-weight:700;font-style:normal">假日</span>`;break;
-      case 'rest':    rs='background:#fafafa;color:#a0aec0;font-style:italic'; sc=`<span style="background:#e2e8f0;color:#4a5568;border-radius:3px;padding:1px 5px;font-weight:700;font-style:normal">休假</span>`;break;
+      case 'early':case 'mid':case 'both':
+        sc=`<span style="background:${r.shift==='mid'?'#dbeafe':'#fef3c7'};color:${r.shift==='mid'?'#1e40af':'#92400e'};border-radius:3px;padding:1px 5px;font-weight:700">${SHIFT_INFO[r.shift].label}</span>`;break;
+      case 'leave': rs=`background:${r.leaveBg||'#fff5f5'}`; sc=`<span style="background:${r.leaveColor||'#c53030'};color:#fff;border-radius:3px;padding:1px 5px;font-weight:700">${r.leaveLabel||'請假'}</span>`;break;
+      case 'holiday':case 'weekend':case 'rest': sc='—';break;
     }
-    const bd=(r.shift==='early'||r.shift==='mid')?'':'—';
-    tbody+=`<tr style="${rs}">${td(r.key.slice(5).replace('-','/'),'font-size:10px;font-weight:600')}${td(dow,ds)}${td(sc)}${td(bd)}${td(bd)}${td(bd)}${td(bd)}${td(bd)}</tr>`;
+    if(hasBoth){
+      // 12 columns: 日期|星期|班別|早上班|早簽|早下班|早簽|中上班|中簽|中下班|中簽|工時
+      const cols=r.shift==='both'  ? `${td('')}${td('')}${td('')}${td('')}${td('')}${td('')}${td('')}${td('')}${td('')}`
+                :r.shift==='early' ? `${td('')}${td('')}${td('')}${td('')}${td('—','',4)}${td('')}`
+                :r.shift==='mid'   ? `${td('—','',4)}${td('')}${td('')}${td('')}${td('')}${td('')}`
+                :/* non-work */      `${td('—')}${td('—')}${td('—')}${td('—')}${td('—')}${td('—')}${td('—')}${td('—')}${td('—')}`;
+      tbody+=`<tr style="${rs}">${dateCell}${dowCell}${td(sc)}${cols}</tr>`;
+    }else{
+      const isWork=r.shift==='early'||r.shift==='mid';
+      const bd=isWork?'':'—';
+      const hrsTd=isWork?td(''):td('—');
+      tbody+=`<tr style="${rs}">${dateCell}${dowCell}${td(sc)}${td(bd)}${td(bd)}${td(bd)}${td(bd)}${hrsTd}</tr>`;
+    }
   });
+  const thead=hasBoth
+    ?`<tr>
+        <th rowspan="2">日期</th><th rowspan="2">星期</th><th rowspan="2">班別</th>
+        <th colspan="4">早班　08:00–12:00</th>
+        <th colspan="4">中班　13:30–17:30</th>
+        <th rowspan="2">工時</th>
+      </tr>
+      <tr>
+        <th>上班時間</th><th>簽　名</th><th>下班時間</th><th>簽　名</th>
+        <th>上班時間</th><th>簽　名</th><th>下班時間</th><th>簽　名</th>
+      </tr>`
+    :`<tr><th>日期</th><th>星期</th><th>班別</th><th>上班時間</th><th>簽　名</th><th>下班時間</th><th>簽　名</th><th>工時</th></tr>`;
   const w=window.open('','_blank','width=900,height=700');
   w.document.write(`<!DOCTYPE html><html lang="zh-TW"><head>
     <meta charset="UTF-8"><title>出勤紀錄 - ${p.name}</title>
@@ -1333,8 +1382,7 @@ function printAtt(){
       .nm{font-size:14px;color:#444;margin-bottom:3px;font-weight:600}
       table{width:100%;border-collapse:collapse;font-size:8.5px;table-layout:fixed}
       thead th{background:#553c9a;color:#fff;padding:4px 2px;text-align:center;border:1px solid #44337a;font-size:12px}
-      tbody td{padding:2px;text-align:center;border:1px solid #ddd;white-space:nowrap;overflow:hidden;height:30px;line-height:26px}
-      tr:nth-child(even) td{background:#faf5ff}
+      tbody td{padding:2px;text-align:center;border:1px solid #ddd;white-space:nowrap;overflow:hidden;height:30px;line-height:26px;background:#fff}
     </style></head><body>
     <div class="card">
       <div class="hd">
@@ -1342,7 +1390,7 @@ function printAtt(){
         <div class="nm">${p.empId?`員工編號：<strong>${p.empId}</strong>　`:''}姓名：<strong style="color:${p.color}">${p.name}</strong></div>
       </div>
       <table>
-        <thead><tr><th>日期</th><th>星期</th><th>班別</th><th>上班時間</th><th>簽名</th><th>下班時間</th><th>簽名</th><th>工時</th></tr></thead>
+        <thead>${thead}</thead>
         <tbody>${tbody}</tbody>
       </table>
     </div></body></html>`);
@@ -1355,27 +1403,57 @@ function exportAttExcel(){
   const p=S.persons.find(x=>x.id===attPersonId);
   if(!p)return;
   const rows=getAttRows(attPersonId,attYear,attMonth);
-  const worked=rows.filter(r=>r.shift==='early'||r.shift==='mid');
-  const data=[
-    [`${attYear} 年 ${attMonth+1} 月　計時人員出勤紀錄表`],
-    [p.empId?`員工編號：${p.empId}　姓名：${p.name}`:`姓名：${p.name}`],
-    [],
-    ['#','日期','星期','班別','上班時間','簽名','下班時間','簽名','工時（小時）'],
-  ];
-  let seq=0;
-  rows.forEach(r=>{
-    const dow=DOW_ZH[r.dow];
-    switch(r.shift){
-      case 'early':case 'mid': seq++;data.push([seq,r.key,dow,SHIFT_INFO[r.shift].label,'','','','','']);break;
-      case 'leave':   data.push(['—',r.key,dow,r.leaveLabel||'請假','—','—','—','—','—']);break;
-      case 'holiday': data.push(['—',r.key,dow,`🏛️ ${r.name}`,'—','—','—','—','—']);break;
-      case 'weekend': data.push(['—',r.key,dow,'假日','—','—','—','—','—']);break;
-      case 'rest':    data.push(['—',r.key,dow,'休假','—','—','—','—','—']);break;
-    }
-  });
-  const ws=XLSX.utils.aoa_to_sheet(data);
-  ws['!cols']=[{wch:5},{wch:14},{wch:6},{wch:12},{wch:10},{wch:14},{wch:10},{wch:14},{wch:10}];
-  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}}];
+  const hasBoth=rows.some(r=>r.shift==='both');
+  let data,ws;
+  if(hasBoth){
+    // 12-column dual-header format
+    const LAST=12;
+    data=[
+      [`${attYear} 年 ${attMonth+1} 月　計時人員出勤紀錄表`],
+      [p.empId?`員工編號：${p.empId}　姓名：${p.name}`:`姓名：${p.name}`],
+      [],
+      ['#','日期','星期','班別','早班　08:00–12:00','','','','中班　13:30–17:30','','','','工時（小時）'],
+      ['','','','','上班時間','簽　名','下班時間','簽　名','上班時間','簽　名','下班時間','簽　名',''],
+    ];
+    let seq=0;
+    rows.forEach(r=>{
+      const dow=DOW_ZH[r.dow];
+      switch(r.shift){
+        case 'both':  seq++;data.push([seq,r.key,dow,SHIFT_INFO.both.label, '','','','', '','','','', '']);break;
+        case 'early': seq++;data.push([seq,r.key,dow,SHIFT_INFO.early.label,'','','','', '—','—','—','—','']);break;
+        case 'mid':   seq++;data.push([seq,r.key,dow,SHIFT_INFO.mid.label,  '—','—','—','—','','','','', '']);break;
+        case 'leave':   data.push(['—',r.key,dow,r.leaveLabel||'請假','—','—','—','—','—','—','—','—','—']);break;
+        case 'holiday':case 'weekend':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—','—','—','—','—']);break;
+      }
+    });
+    ws=XLSX.utils.aoa_to_sheet(data);
+    ws['!cols']=[{wch:5},{wch:8},{wch:5},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8}];
+    ws['!merges']=[
+      {s:{r:0,c:0},e:{r:0,c:LAST}},
+      {s:{r:1,c:0},e:{r:1,c:LAST}},
+      {s:{r:3,c:4},e:{r:3,c:7}},
+      {s:{r:3,c:8},e:{r:3,c:11}},
+    ];
+  } else {
+    data=[
+      [`${attYear} 年 ${attMonth+1} 月　計時人員出勤紀錄表`],
+      [p.empId?`員工編號：${p.empId}　姓名：${p.name}`:`姓名：${p.name}`],
+      [],
+      ['#','日期','星期','班別','上班時間','簽名','下班時間','簽名','工時（小時）'],
+    ];
+    let seq=0;
+    rows.forEach(r=>{
+      const dow=DOW_ZH[r.dow];
+      switch(r.shift){
+        case 'early':case 'mid': seq++;data.push([seq,r.key,dow,SHIFT_INFO[r.shift].label,'','','','','']);break;
+        case 'leave': data.push(['—',r.key,dow,r.leaveLabel||'請假','—','—','—','—','—']);break;
+        case 'holiday':case 'weekend':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—']);break;
+      }
+    });
+    ws=XLSX.utils.aoa_to_sheet(data);
+    ws['!cols']=[{wch:5},{wch:14},{wch:6},{wch:12},{wch:10},{wch:14},{wch:10},{wch:14},{wch:10}];
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}},{s:{r:1,c:0},e:{r:1,c:8}}];
+  }
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'出勤紀錄');
   XLSX.writeFile(wb,`出勤紀錄_${p.name}_${attYear}${String(attMonth+1).padStart(2,'0')}.xlsx`);
@@ -1519,3 +1597,4 @@ initFirebase();load();renderAll();
 </script>
 </body>
 </html>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
