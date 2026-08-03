@@ -703,6 +703,7 @@ function initFirebase() {
 function setSyncDot(status) {
   const el = document.getElementById('syncDot');
   if (!el) return;
+  el.onclick=()=>alert({connecting:'🟡 連線中，請稍候…\n\n若長時間黃色，請改用行動數據開啟頁面，或重新整理。',synced:'🟢 資料已同步',error:'🔴 同步失敗\n\n請確認網路連線，或改用行動數據開啟頁面。'}[status]||'未知狀態');
   const map = {
     connecting: { bg:'#d97706', title:'連線中…' },
     synced:     { bg:'#38a169', title:'已同步 ✔' },
@@ -802,11 +803,14 @@ function load(){
   dataRef.on('value',(snap)=>{
     clearTimeout(fbTimeout);fbTimeout=null;
     const data=snap.val();
-    if(data){
+    if(data && (data.persons||[]).length>0){
       S.schedule=data.schedule||{};
       S.persons=(data.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||'',resigned:p.resigned||false}));
       localStorage.setItem('shift_v3',JSON.stringify(S));
       renderAll();
+    } else if(!data && S.persons.length>0){
+      // Firebase 空資料但本機有資料 → 自動推上雲端
+      dataRef.set({persons:S.persons,schedule:S.schedule});
     }
     setSyncDot('synced');
   },()=>{if(fbTimeout){clearTimeout(fbTimeout);fbTimeout=null;}setSyncDot('error');});
@@ -1581,15 +1585,4 @@ function printCalendarMobile(){
   const {year,month}=S;
   const monthLabel=`${year}年${month+1}月`;
   document.getElementById('calPrintArea').innerHTML=`
-<h1>${monthLabel} 計時人員排班表</h1>
-<div class="sub">早班 08:00–12:00（4h）｜中班 13:30–17:30（4h）</div>
-${_buildCalTable(year,month)}`;
-  window.print();
-}
-
-/* ══════════════════════════════════════════
-   TOAST / KEYBOARD
-══════════════════════════════════════════ */
-let _t;
-function toast(msg){
-  const el=document.get
+<h1>${monthLabel
