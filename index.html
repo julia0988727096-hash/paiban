@@ -794,25 +794,21 @@ function load(){
   }
   // Firebase 即時監聽（任何裝置改動都會自動更新）
   if(!fbReady)return;
-  // 20 秒內若無回應 → 轉紅點
   let fbTimeout=setTimeout(()=>setSyncDot('error'),20000);
-  // 監聽連線狀態：斷線 → 黃點；重連後 dataRef.on 會再次觸發
-  firebase.database().ref('.info/connected').on('value',(snap)=>{
-    if(snap.val()===false)setSyncDot('connecting');
-  });
   dataRef.on('value',(snap)=>{
-    clearTimeout(fbTimeout);fbTimeout=null;
-    const data=snap.val();
-    if(data && (data.persons||[]).length>0){
-      S.schedule=data.schedule||{};
-      S.persons=(data.persons||[]).map(p=>({...p,pref:p.pref||'both',empId:p.empId||'',resigned:p.resigned||false}));
-      localStorage.setItem('shift_v3',JSON.stringify(S));
-      renderAll();
-    } else if(!data && S.persons.length>0){
-      // Firebase 空資料但本機有資料 → 自動推上雲端
-      dataRef.set({persons:S.persons,schedule:S.schedule});
-    }
-    setSyncDot('synced');
+    try{
+      clearTimeout(fbTimeout);fbTimeout=null;
+      const data=snap.val();
+      if(data){
+        S.schedule=data.schedule||{};
+        // Firebase 有時回傳 object 而非 array，兩者都處理
+        const arr=Array.isArray(data.persons)?data.persons:Object.values(data.persons||{});
+        S.persons=arr.map(p=>({...p,pref:p.pref||'both',empId:p.empId||'',resigned:p.resigned||false}));
+        localStorage.setItem('shift_v3',JSON.stringify(S));
+        renderAll();
+      }
+      setSyncDot('synced');
+    }catch(e){console.error('Firebase data error:',e);setSyncDot('error');}
   },()=>{if(fbTimeout){clearTimeout(fbTimeout);fbTimeout=null;}setSyncDot('error');});
 }
 
@@ -1585,4 +1581,10 @@ function printCalendarMobile(){
   const {year,month}=S;
   const monthLabel=`${year}年${month+1}月`;
   document.getElementById('calPrintArea').innerHTML=`
-<h1>${monthLabel
+<h1>${monthLabel} 計時人員排班表</h1>
+<div class="sub">早班 08:00–12:00（4h）｜中班 13:30–17:30（4h）</div>
+${_buildCalTable(year,month)}`;
+  window.print();
+}
+
+/* ═══════════
