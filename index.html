@@ -1342,7 +1342,8 @@ function printAtt(){
       case 'early':case 'mid':case 'both':
         sc=`<span style="background:${r.shift==='mid'?'#dbeafe':'#fef3c7'};color:${r.shift==='mid'?'#1e40af':'#92400e'};border-radius:3px;padding:1px 5px;font-weight:700">${SHIFT_INFO[r.shift].label}</span>`;break;
       case 'leave': rs=`background:${r.leaveBg||'#fff5f5'}`; sc=`<span style="background:${r.leaveColor||'#c53030'};color:#fff;border-radius:3px;padding:1px 5px;font-weight:700">${r.leaveLabel||'請假'}</span>`;break;
-      case 'holiday':case 'weekend':case 'rest': sc='—';break;
+      case 'holiday':case 'rest': sc='—';break;
+      case 'weekend': sc='休假';break;
     }
     if(hasBoth){
       // 12 columns: 日期|星期|班別|早上班|早簽|早下班|早簽|中上班|中簽|中下班|中簽|工時
@@ -1424,7 +1425,8 @@ function exportAttExcel(){
         case 'early': seq++;data.push([seq,r.key,dow,SHIFT_INFO.early.label,'','','','', '—','—','—','—','']);break;
         case 'mid':   seq++;data.push([seq,r.key,dow,SHIFT_INFO.mid.label,  '—','—','—','—','','','','', '']);break;
         case 'leave':   data.push(['—',r.key,dow,r.leaveLabel||'請假','—','—','—','—','—','—','—','—','—']);break;
-        case 'holiday':case 'weekend':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—','—','—','—','—']);break;
+        case 'holiday':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—','—','—','—','—']);break;
+        case 'weekend': data.push(['—',r.key,dow,'休假','—','—','—','—','—','—','—','—','—']);break;
       }
     });
     ws=XLSX.utils.aoa_to_sheet(data);
@@ -1448,7 +1450,8 @@ function exportAttExcel(){
       switch(r.shift){
         case 'early':case 'mid': seq++;data.push([seq,r.key,dow,SHIFT_INFO[r.shift].label,'','','','','']);break;
         case 'leave': data.push(['—',r.key,dow,r.leaveLabel||'請假','—','—','—','—','—']);break;
-        case 'holiday':case 'weekend':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—']);break;
+        case 'holiday':case 'rest': data.push(['—',r.key,dow,'—','—','—','—','—','—']);break;
+        case 'weekend': data.push(['—',r.key,dow,'休假','—','—','—','—','—']);break;
       }
     });
     ws=XLSX.utils.aoa_to_sheet(data);
@@ -1592,9 +1595,4 @@ document.addEventListener('keydown',e=>{
 
 /* ══════════════════════════════════════════
    RENDER ALL / INIT
-══════════════════════════════════════════ */
-function renderAll(){renderPersonList();renderCalendar();}
-initFirebase();load();renderAll();
-</script>
-</body>
-</html>
+══════════�
