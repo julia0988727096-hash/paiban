@@ -793,7 +793,14 @@ function load(){
   }
   // Firebase 即時監聽（任何裝置改動都會自動更新）
   if(!fbReady)return;
+  // 20 秒內若無回應 → 轉紅點
+  let fbTimeout=setTimeout(()=>setSyncDot('error'),20000);
+  // 監聽連線狀態：斷線 → 黃點；重連後 dataRef.on 會再次觸發
+  firebase.database().ref('.info/connected').on('value',(snap)=>{
+    if(snap.val()===false)setSyncDot('connecting');
+  });
   dataRef.on('value',(snap)=>{
+    clearTimeout(fbTimeout);fbTimeout=null;
     const data=snap.val();
     if(data){
       S.schedule=data.schedule||{};
@@ -802,7 +809,7 @@ function load(){
       renderAll();
     }
     setSyncDot('synced');
-  },()=>setSyncDot('error'));
+  },()=>{if(fbTimeout){clearTimeout(fbTimeout);fbTimeout=null;}setSyncDot('error');});
 }
 
 /* ══════════════════════════════════════════
@@ -1585,14 +1592,4 @@ ${_buildCalTable(year,month)}`;
 ══════════════════════════════════════════ */
 let _t;
 function toast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(_t);_t=setTimeout(()=>el.classList.remove('show'),2500);
-}
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape')closeSched();
-});
-
-/* ══════════════════════════════════════════
-   RENDER ALL / INIT
-══════════�
+  const el=document.get
