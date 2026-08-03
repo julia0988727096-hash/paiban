@@ -1587,4 +1587,27 @@ ${_buildCalTable(year,month)}`;
   window.print();
 }
 
-/* ═══════════
+/* ══════════════════════════════════════════
+   TOAST / KEYBOARD
+══════════════════════════════════════════ */
+let _t;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_t);_t=setTimeout(()=>el.classList.remove('show'),2500);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeSched();
+});
+
+/* ══════════════════════════════════════════
+   RENDER ALL / INIT
+══════════════════════════════════════════ */
+function renderAll(){
+  try{renderPersonList();}catch(e){document.getElementById('calGrid').innerHTML='<div style="padding:16px;color:red;font-size:12px">personList error: '+e.message+'</div>';}
+  try{renderCalendar();}catch(e){document.getElementById('calGrid').innerHTML+='<div style="padding:16px;color:red;font-size:12px">calendar error: '+e.message+'</div>';}
+}
+initFirebase();load();renderAll();
+</script>
+</body>
+</html>
